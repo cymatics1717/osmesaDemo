@@ -1,14 +1,7 @@
 #include "arwidget.hh"
-//#ifdef MESA
-//#include
-
-//#else
-//#endif
-
 
 //#include <GL/glew.h>
 //#include <GLFW/glfw3.h>
-
 
 #define GL_GLEXT_PROTOTYPES 1
 #include <GL/gl.h>
@@ -35,6 +28,8 @@ struct ARWidgetPrivate{
     OSMesaContext mContext;
     int w;
     int h;
+    int x;int y;int z;
+    int x1;int y1;int z1;
 };
 
 static void get_bounding_box_for_node (const aiScene *sc,const  aiNode* nd, aiVector3D* min, aiVector3D* max, aiMatrix4x4* trafo)
@@ -68,7 +63,7 @@ static void get_bounding_box_for_node (const aiScene *sc,const  aiNode* nd, aiVe
     *trafo = prev;
 }
 
-static void  get_bounding_box (const  aiScene *sc,aiVector3D* min,  aiVector3D* max)
+static void get_bounding_box (const  aiScene *sc,aiVector3D* min,  aiVector3D* max)
 {
     aiMatrix4x4 trafo;
     aiIdentityMatrix4(&trafo);
@@ -159,63 +154,69 @@ static void apply_material(const  aiMaterial *mtl)
         glEnable(GL_CULL_FACE);
     
     
-    printf("%s:%d\t%s\n",__FUNCTION__,__LINE__,glGetString(GL_VERSION));
+    //    printf("%s:%d\t%s\n",__FUNCTION__,__LINE__,glGetString(GL_VERSION));
 
 }
 
-static void recursive_render (const  aiScene *sc, const  aiNode* nd)
+static void recursive_render (const  aiScene *sc, const  aiNode* nd,int depth)
 {
-    unsigned int i;
-    unsigned int n = 0, t;
     aiMatrix4x4 m = nd->mTransformation;
 
-    /* update transform */
     aiTransposeMatrix4(&m);
     glPushMatrix();
     glMultMatrixf((float*)&m);
+//    glScalef(.25,.25,.25);
 
-    /* draw all meshes assigned to this node */
-    for (; n < nd->mNumMeshes; ++n) {
-        const  aiMesh* mesh = sc->mMeshes[nd->mMeshes[n]];
-
-        apply_material(sc->mMaterials[mesh->mMaterialIndex]);
-
-        if (mesh->mNormals == NULL) {
-            glDisable(GL_LIGHTING);
-        } else {
-            glEnable(GL_LIGHTING);
-        }
-
-        for (t = 0; t < mesh->mNumFaces; ++t) {
-            const  aiFace* face = &mesh->mFaces[t];
-            GLenum face_mode;
-
-            switch (face->mNumIndices) {
-            case 1: face_mode = GL_POINTS; break;
-            case 2: face_mode = GL_LINES; break;
-            case 3: face_mode = GL_TRIANGLES; break;
-            default: face_mode = GL_POLYGON; break;
-            }
-
-            glBegin(face_mode);
-
-            for (i = 0; i < face->mNumIndices; i++) {
-                int index = face->mIndices[i];
-                if (mesh->mColors[0] != NULL)
-                    glColor4fv((GLfloat*)&mesh->mColors[0][index]);
-                if (mesh->mNormals != NULL)
-                    glNormal3fv(&mesh->mNormals[index].x);
-                glVertex3fv(&mesh->mVertices[index].x);
-            }
-
-            glEnd();
-        }
-
+    int cnt =0;
+    if(strcmp(nd->mName.C_Str(),"g 1:inner arrow")==0){
+        cnt =1;
+    } else if(strcmp(nd->mName.C_Str(),"g 2:outer arrow")==0){
+        cnt =30;
     }
 
-    /* draw all children */
-    for (n = 0; n < nd->mNumChildren; ++n) {
-        recursive_render(sc, nd->mChildren[n]);
+    for(int j=0;j<cnt;++j){
+        glTranslatef(0,0,-50);
+
+        for (int n = 0; n < nd->mNumMeshes; ++n) {
+            const  aiMesh* mesh = sc->mMeshes[nd->mMeshes[n]];
+            apply_material(sc->mMaterials[mesh->mMaterialIndex]);
+
+            if (mesh->mNormals == NULL) {
+                glDisable(GL_LIGHTING);
+            } else {
+                glEnable(GL_LIGHTING);
+            }
+
+            for (int t = 0; t < mesh->mNumFaces; ++t) {
+                const  aiFace* face = &mesh->mFaces[t];
+                GLenum face_mode;
+
+                switch (face->mNumIndices) {
+                case 1: face_mode = GL_POINTS; break;
+                case 2: face_mode = GL_LINES; break;
+                case 3: face_mode = GL_TRIANGLES; break;
+                default: face_mode = GL_POLYGON; break;
+                }
+
+                glBegin(face_mode);
+
+                for (int i = 0; i < face->mNumIndices; i++) {
+                    int index = face->mIndices[i];
+
+                    if (mesh->mColors[0] != NULL)
+                        glColor4fv((GLfloat*)&mesh->mColors[0][index]);
+                    if (mesh->mNormals != NULL)
+                        glNormal3fv(&mesh->mNormals[index].x);
+                    glVertex3fv(&mesh->mVertices[index].x);
+                }
+
+                glEnd();
+            }
+        }
+    }
+
+    for (int n = 0; n < nd->mNumChildren; ++n) {
+        recursive_render(sc, nd->mChildren[n],depth+1);
     }
 
     glPopMatrix();
@@ -271,7 +272,7 @@ static void init(int width,int height)  {
     if (status == GL_FRAMEBUFFER_COMPLETE) {
         printf("success !\n");
     } else {
-        printf("error________________!\n");
+        printf("error!\n");
     }
 
     glEnable(GL_DEPTH_TEST);
@@ -304,15 +305,15 @@ int ARWidget::initGL(int width, int height)
     p->w = width;
     p->h = height;
 
-//    glfwInit();
-//    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-//    glfwWindowHint(GLFW_SAMPLES, 4);
-//    GLFWwindow* window = glfwCreateWindow(width, height, "", nullptr, nullptr);
-//    glfwMakeContextCurrent(window);
-//    if (glewInit() != GLEW_OK) {
-//        fprintf(stderr, "Failed to initialize GLEW\n");
-//        return 1;
-//    }
+    //    glfwInit();
+    //    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    //    glfwWindowHint(GLFW_SAMPLES, 4);
+    //    GLFWwindow* window = glfwCreateWindow(width, height, "", nullptr, nullptr);
+    //    glfwMakeContextCurrent(window);
+    //    if (glewInit() != GLEW_OK) {
+    //        fprintf(stderr, "Failed to initialize GLEW\n");
+    //        return 1;
+    //    }
 
 
     p->mBuffer  = (GLfloat *) malloc( width * height * 4 * sizeof(GLfloat));
@@ -324,10 +325,22 @@ int ARWidget::initGL(int width, int height)
     printf("%s:%d\t%s\n",__FUNCTION__,__LINE__,glGetString(GL_VERSION));
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    //    glClearColor(0,0,0,.5);
+
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(30.0, (float) p->w / p->h, 1.0, 1000.0);
+    gluPerspective(53, (float) p->w / p->h, .1, 1000.0);
     glViewport(0, 0, p->w, p->h);
+
+    GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
+    GLfloat mat_shininess[] = { 50.0 };
+    GLfloat light_position[] = { 0.0, 5.0, -1.0, 1.0 };
+
+    glShadeModel (GL_SMOOTH);
+
+    glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
+    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
 
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
@@ -339,6 +352,10 @@ int ARWidget::initGL(int width, int height)
     if (getenv("MODEL_IS_BROKEN"))
         glFrontFace(GL_CW);
     glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+
+    //    p->x = 0;
+    //    p->y = 15;
+    //    p->z = 45;
 
     return 0;
 }
@@ -360,23 +377,33 @@ int ARWidget::loadModel(const std::string &filename)
 int ARWidget::render(cv::Mat &mat, const cv::Point &pos, double yaw, double pitch)
 {
     if(GL_TRUE!=OSMesaMakeCurrent(p->mContext, p->mBuffer, GL_UNSIGNED_BYTE, p->w, p->h))
-	return 1;    
+        return 1;
 
     float tmp;
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+
+    //    glMatrixMode(GL_PROJECTION);
+    //    glLoadIdentity();
+    //    gluPerspective(p->x, (float) p->w / p->h, 1.0, p->y);
+    //    glViewport(0, 0, p->w, p->h);
+
+
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    gluLookAt(0.f, 2.f, 2.5f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f);
+    //    glClearColor(0,0,0,.5);
+    gluLookAt(0,3.7f,3.7f,0,1.8f,1.8f, 0.f, 1.f, 0.f);
+    //    gluLookAt(.1*p->x,.1*p->y,.1*p->z, .1*p->x1,.1*p->y1,.1*p->z1, 0.f, 1.f, 0.f);
+    //    gluLookAt(0.f, 1.f, 2.f, 0.f, 0.f, -5.f, 0.f, 1.f, 0.f);
+    //    gluLookAt(0.f, 1.5f, 4.5f, 0.f, 0.f, -10.f, 0.f, 1.f, 0.f);
 
     glRotatef(-yaw, 0.f, 1.f, 0.f);
     glRotatef(-pitch, 1.f, 0.f, 0.f);
 
-    //glRotatef(90, 0.f, 0.f, 1.f);
-    //glRotatef(90, 0.f, 1.f, 0.f);
+    //    glRotatef(90, 0.f, 0.f, 1.f);
+    //    glRotatef(90, 0.f, 1.f, 0.f);
 
-    /* scale the whole asset to fit into our view frustum */
     tmp = p->scene_max.x - p->scene_min.x;
     tmp = aisgl_max(p->scene_max.y - p->scene_min.y, tmp);
     tmp = aisgl_max(p->scene_max.z - p->scene_min.z, tmp);
@@ -388,14 +415,13 @@ int ARWidget::render(cv::Mat &mat, const cv::Point &pos, double yaw, double pitc
     if (p->scene_list == 0) {
         p->scene_list = glGenLists(1);
         glNewList(p->scene_list, GL_COMPILE);
-        recursive_render(p->scene, p->scene->mRootNode);
+        recursive_render(p->scene, p->scene->mRootNode,0);
         glEndList();
     }
 
     glCallList(p->scene_list);
     glFlush();
 
-    //cv::Mat img = cv::Mat::zeros(p->h,p->w, CV_8UC4);
     cv::Mat img(p->h,p->w, CV_8UC4);
     //glReadBuffer( GL_COLOR_ATTACHMENT0 );
     glReadPixels(0, 0, p->w, p->h, GL_RGBA, GL_UNSIGNED_BYTE, img.data);
@@ -413,5 +439,16 @@ int ARWidget::width()
 int ARWidget::height()
 {
     return p->h;
+}
+
+void ARWidget::setValue(int x, int y, int z, int xx, int yy, int zz)
+{
+    p->x = x;
+    p->y = y;
+    p->z = z;
+
+    p->x1 = xx;
+    p->y1 = yy;
+    p->z1 = zz;
 }
 

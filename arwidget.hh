@@ -18,6 +18,7 @@ public:
 
     int width();
     int height();
+    void setValue(int x, int y, int z,int xx, int yy, int zz);
     void overlayImage(cv::Mat& src, const cv::Mat &overlay, const cv::Point& location);
 private:
     ARWidgetPrivate *p;
